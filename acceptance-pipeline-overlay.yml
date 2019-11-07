@@ -1,0 +1,53 @@
+#@ load("@ytt:overlay", "overlay")
+
+#@overlay/match by=overlay.all
+---
+resources:
+#@overlay/append
+- name: tests
+  type: git
+  icon: github-circle
+  source:
+    uri: ((tests-git-uri))
+    branch: ((tests-git-branch))
+    username: ((git-username))
+    password: ((git-password))
+
+#@overlay/match by=overlay.all
+---
+jobs:
+#@overlay/append
+- name: run-acceptance-tests
+  plan:
+  - get: tests
+    trigger: false
+  - task: run
+    config:
+      platform: linux
+      image_resource:
+        type: docker-image
+        source:
+          repository: cypress/included
+          tag: 3.6.0
+      inputs:
+      - name: tests
+      caches:
+      - path: tests/node_modules
+      run:
+        path: /usr/local/bin/cypress
+        args:
+        - run
+        - -e
+        - base_url=((tests-target-uri))
+        - --project
+        - tests
+    on_success:
+      put: notify
+      params:
+        channel: ((slack-channel))
+        alert_type: success
+    on_failure:
+      put: notify
+      params:
+        channel: ((slack-channel))
+        alert_type: failed

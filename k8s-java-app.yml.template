@@ -1,0 +1,23 @@
+app: myapp
+app-java-version: 11
+
+git-uri: https://github.com/myorg/myapp.git
+git-branch: master
+git-username: johndoe
+git-password: password-or-github-access-token
+
+tests-git-uri: https://github.com/myorg/myapp-tests.git
+tests-git-branch: master
+tests-target-uri: http://myapp.com
+
+slack-webhook: https://hooks.slack.com/services/XXXX/XXX/XXXX
+slack-channel: changeme
+
+spinnaker-pipeline-webhook: http://api.spinnaker.myorg.com/webhooks/webhook/app-source
+
+build-target: http://build.myorg.com
+build-cli-version: 0.0.3
+build-team: myteam
+build-username: user
+build-password: changeme
+build-image: registry.myorg.com/myorg/myapp

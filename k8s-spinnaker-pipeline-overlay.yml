@@ -1,0 +1,102 @@
+#@ load("@ytt:overlay", "overlay")
+
+#@overlay/match by=overlay.all
+---
+resources:
+#@overlay/append
+- name: build-image
+  type: docker-image
+  icon: docker
+  source:
+    repository: ((build-image))
+
+#@overlay/match by=overlay.all
+---
+jobs:
+#@overlay/append
+- name: trigger-deployment-pipeline
+  plan:
+  - get: build-image
+    trigger: true
+    params:
+      skip_download: true
+  - task: create-artifact
+    config:
+      platform: linux
+      image_resource:
+        type: docker-image
+        source:
+          repository: alexandreroman/pb-cli
+          tag: ((build-cli-version))
+      inputs:
+      - name: build-image
+      outputs:
+      - name: spinnaker-artifact
+      run:
+        path: /bin/bash
+        args:
+        - -c
+        - |
+          export BUILD_SERVICE_USERNAME=((build-username))
+          export BUILD_SERVICE_PASSWORD=((build-password))
+          pb api set ((build-target)) --skip-ssl-validation
+          pb login
+
+          DOCKER_DIGEST=$(cat build-image/digest | sed 's/sha256://')
+          DOCKER_NAME=$(cat build-image/repository)
+          BUILD_ID=`pb image builds $DOCKER_NAME | grep $DOCKER_DIGEST | awk '{ print $1}'`
+          GIT_REV=`pb image logs $DOCKER_NAME -b $BUILD_ID | grep source-init | awk '{ print $7 }' | sed 's/"//g'`
+
+          mkdir -p spinnaker-artifact
+          cat > spinnaker-artifact/artifact.json << EOF
+          {
+            "type": "docker/image",
+            "reference": "$(cat build-image/repository)@$(cat build-image/digest)",
+            "name": "$(cat build-image/repository)",
+            "version": "$(cat build-image/digest)",
+            "metadata": {
+              "git-revision": "$GIT_REV"
+            }
+          }
+          EOF
+          cat spinnaker-artifact/artifact.json
+
+          cat > spinnaker-artifact/req.json << EOF
+          {
+            "artifacts": [
+              $(cat spinnaker-artifact/artifact.json)
+            ]
+          }
+          EOF
+  - task: trigger-pipeline
+    config:
+      platform: linux
+      image_resource:
+        type: docker-image
+        source:
+          repository: curlimages/curl
+          tag: latest
+      inputs:
+      - name: spinnaker-artifact
+      run:
+        path: curl
+        args:
+        - ((spinnaker-pipeline-webhook))
+        - -X
+        - POST
+        - -H
+        - "Content-Type: application/json"
+        - --data
+        - "@spinnaker-artifact/req.json"
+    on_success:
+      put: notify
+      params:
+        channel: ((slack-channel))
+        alert_type: success
+        message: "Deploying new image: ((build-image))"
+    on_failure:
+      put: notify
+      params:
+        channel: ((slack-channel))
+        alert_type: failed
+        message: "Failed to deploy image: ((build-image))"
