@@ -1,5 +1,5 @@
 app: myapp
-app-java-version: 11
+app-java-version: "11"
 
 git-uri: https://github.com/myorg/myapp.git
 git-branch: master
